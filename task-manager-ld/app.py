@@ -2,7 +2,7 @@
 """
 Task Manager with LaunchDarkly Feature Flags & Experiments
 """
-
+#import all necessary modules
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
 import os
 from dotenv import load_dotenv
@@ -13,14 +13,18 @@ import time
 
 import database as db
 
+#load environment variables from .env file
 load_dotenv()
 
+#logging to reduce the noice output
 logging.getLogger('ldclient').setLevel(logging.ERROR)
 logging.getLogger('urllib3').setLevel(logging.ERROR)
 
+#create Flask app and secret key setup
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 
+#initialize the database
 db.init_db()
 
 # LaunchDarkly Setup
@@ -28,15 +32,17 @@ import ldclient
 from ldclient import Context
 from ldclient.config import Config
 
+#check of ld sdk key
 sdk_key = os.getenv("LAUNCHDARKLY_SDK_KEY", "")
 
+#if key is found, initialize the client
 if sdk_key:
-    # Simple config - use defaults which work fine
+
     ld_config = Config(sdk_key=sdk_key)
     ldclient.set_config(ld_config)
     ld_client = ldclient.get()
     
-    # Wait for initialization
+    # wait for initialization, output status
     if ld_client.is_initialized():
         print(f"\n✓ LaunchDarkly initialized successfully")
     else:
@@ -45,7 +51,7 @@ else:
     ld_client = None
     print("\nNo LaunchDarkly SDK key found. Running without feature flags.")
 
-
+#pull the flag values from launchdarkly and print them to the console for debugging
 def get_flag(flag_key, context, default=False):
     """Evaluate a feature flag - this also sends an evaluation event"""
     if ld_client and ld_client.is_initialized():
@@ -54,7 +60,7 @@ def get_flag(flag_key, context, default=False):
         return value
     return default
 
-
+#track the events of launchdarkly and print them to the console for debugging, events are used to measure experiment success
 def track_event(event_name, context, data=None, metric_value=None):
     """Track a custom event"""
     if ld_client and ld_client.is_initialized():
@@ -65,13 +71,14 @@ def track_event(event_name, context, data=None, metric_value=None):
         else:
             ld_client.track(event_name, context)
         
-        # Flush immediately to ensure event is sent
+        # flush immediately to ensure event is sent
         ld_client.flush()
         print(f"[EVENT] {event_name} tracked and flushed for {context.key}")
         return True
     return False
 
-
+#build context for the user data which is used for flag eval and event tracking 
+# this is critical for the experiment to work since it makes sure the user is in the experiment context when they trigger the event
 def get_ld_context(user=None):
     """Build a LaunchDarkly context from user data"""
     if user:
@@ -88,7 +95,7 @@ def get_ld_context(user=None):
                 .anonymous(True)
                 .build())
 
-
+#login required decorator to protect routes that require authentication
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -98,13 +105,13 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-
+#provides the current user object, which allows for flag eval and tracking for events
 def get_current_user():
     if 'user_id' in session:
         return db.get_user_by_id(session['user_id'])
     return None
 
-
+#routes for logging which evaluates the flags
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -128,14 +135,14 @@ def login():
     demo_users = ['alice', 'bob', 'carol', 'david', 'eve']
     return render_template('login.html', demo_users=demo_users)
 
-
+#logout route
 @app.route('/logout')
 def logout():
     session.clear()
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
-
+#index route which evaluates the flags and tracks the events for the experiment
 @app.route('/')
 @login_required
 def index():
@@ -148,7 +155,6 @@ def index():
     
     tasks = db.get_tasks(user['id'])
     
-    # Evaluate all flags
     dark_mode = get_flag("dark-mode", context, False)
     
     show_stats = get_flag("task-stats", context, False)
@@ -173,17 +179,19 @@ def index():
     priority_enabled = get_flag("task-priority", context, False)
     due_dates_enabled = get_flag("task-due-dates", context, False)
     
-    # CRITICAL: Evaluate the experiment flag
-    # This creates the exposure event that registers the user in the experiment
+    #experiment flag creation for progress-metrics
+    #registers the users that have the flag enabled in the experiment and allows us to track their behavior for the experiment analysis
     progress_metrics_enabled = get_flag("progress-metrics", context, False)
     print(f">>> EXPERIMENT FLAG: progress-metrics = {progress_metrics_enabled}")
     
+    # if the progress metrics flag is enabled, we want to track when users view the progress chart and also pull any relevant data for that chart
     progress_data = None
     if progress_metrics_enabled:
         progress_data = db.get_progress_data(user['id'])
         track_event("progress-chart-viewed", context)
         db.log_event(user['id'], 'progress-chart-viewed')
     
+    # pass all flags to the template for conditional UI rendering
     flags = {
         "dark_mode": dark_mode,
         "stats": show_stats,
@@ -206,7 +214,7 @@ def index():
         search_query=search_query
     )
 
-
+#route for adding a task which also evaluates the flags and tracks the events for the experiment
 @app.route('/add', methods=['POST'])
 @login_required
 def add():
@@ -237,7 +245,7 @@ def add():
     
     return redirect(url_for('index'))
 
-
+#route for toggling a task which also evaluates the flags and tracks the events for the experiment
 @app.route('/toggle/<int:task_id>')
 @login_required
 def toggle(task_id):
@@ -252,20 +260,20 @@ def toggle(task_id):
     print(f"Task ID: {task_id}")
     print(f"LD Client Initialized: {ld_client.is_initialized() if ld_client else False}")
     
-    # CRITICAL: Re-evaluate the experiment flag before tracking
-    # This ensures the user is in the experiment context
+    # re-evaluate the experiment flag before tracking
+    # ensures the user is in the experiment context
     progress_enabled = get_flag("progress-metrics", context, False)
     print(f">>> Experiment Flag: progress-metrics = {progress_enabled}")
     
-    # Toggle the task
+    # toggle the task
     new_status = db.toggle_task(task_id, user['id'])
     print(f"Task Status Changed: {new_status} ({'COMPLETED' if new_status == 1 else 'INCOMPLETE'})")
     
-    # Only track completion events (not un-completion)
+    # only track completion events (not un-completion)
     if new_status == 1:
         print(f"\n>>> TRACKING task-completed EVENT <<<")
         
-        # Track the event
+        # track the event
         success = track_event("task-completed", context)
         
         if success:
@@ -273,7 +281,7 @@ def toggle(task_id):
         else:
             print(f"✗ LaunchDarkly event failed to send")
         
-        # Also log to local database
+        # also log to local database
         db.log_event(user['id'], 'task-completed')
         print(f"✓ Event logged to local database")
     else:
@@ -283,7 +291,7 @@ def toggle(task_id):
     
     return redirect(url_for('index'))
 
-
+#delete tracking route which also evaluates the flags and tracks the events for the experiment
 @app.route('/delete/<int:task_id>')
 @login_required
 def delete(task_id):
@@ -291,7 +299,7 @@ def delete(task_id):
     db.delete_task(task_id, user['id'])
     return redirect(url_for('index'))
 
-
+#API route to expose flag values for debugging/demo purposes
 @app.route('/api/flags')
 def api_flags():
     user = get_current_user()
@@ -311,14 +319,14 @@ def api_flags():
         "flags": flags
     })
 
-
+#API route to expose progress data for users in the experiment
 @app.route('/api/progress')
 @login_required
 def api_progress():
     user = get_current_user()
     return jsonify(db.get_progress_data(user['id']))
 
-
+#API route to test event tracking - this can be used to verify that events are being sent to LaunchDarkly correctly
 @app.route('/api/test-event')
 @login_required
 def test_event():
@@ -326,10 +334,10 @@ def test_event():
     user = get_current_user()
     context = get_ld_context(dict(user))
     
-    # Evaluate the flag first
+    # evaluate the flag first
     progress_enabled = get_flag("progress-metrics", context, False)
     
-    # Send a test event
+    # send a test event
     success = track_event("task-completed", context)
     
     return jsonify({
@@ -347,7 +355,7 @@ def cleanup(error):
     if ld_client and ld_client.is_initialized():
         ld_client.flush()
 
-
+#runs the flask app and also ensures that any remaining events are flushed to LaunchDarkly on shutdown, which is important for ensuring we capture all experiment data even if the server is stopped
 if __name__ == "__main__":
     print("\n" + "="*70)
     print(" TASK MANAGER - LaunchDarkly Server-Side Experiment")
@@ -380,6 +388,7 @@ if __name__ == "__main__":
     print("Server Starting: http://localhost:5000")
     print("="*70 + "\n")
     
+    # run the Flask app
     try:
         app.run(debug=True, port=5000, use_reloader=False, host='0.0.0.0')
     finally:

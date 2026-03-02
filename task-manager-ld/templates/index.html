@@ -4,7 +4,7 @@
 
 {% if flags.progress_metrics and progress_data %}
 <div class="card progress-card">
-    <h2 class="card-title">📊 Your Progress</h2>
+    <h2 class="card-title">Your Progress</h2>
     
     <div class="progress-circle-container">
         <div class="progress-circle" data-percent="{{ progress_data.completion_rate }}">
@@ -95,7 +95,7 @@
 </div>
 
 <div class="card" id="tasks-section">
-    <h2 class="card-title">📝 Tasks ({{ tasks|length }})</h2>
+    <h2 class="card-title">Tasks ({{ tasks|length }})</h2>
     
     {% if tasks %}
     <ul class="task-list">
@@ -131,7 +131,7 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">No tasks yet. Add one above! 👆</p>
+    <p class="empty-state">No tasks yet. Add one above!</p>
     {% endif %}
 </div>
 

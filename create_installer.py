@@ -14,7 +14,7 @@ import json
 import platform
 from pathlib import Path
 
-# Directories and files to ignore
+# directories and files to ignore
 IGNORE_PATTERNS = {
     '__pycache__',
     '.git',
@@ -33,10 +33,10 @@ IGNORE_PATTERNS = {
     'install_',
 }
 
-# Files to encode as binary
+# files to encode as binary
 BINARY_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.woff', '.woff2', '.ttf'}
 
-
+# helper function to check if a path should be ignored based on patterns
 def should_ignore(path_str):
     """Check if path should be ignored"""
     for pattern in IGNORE_PATTERNS:
@@ -47,7 +47,7 @@ def should_ignore(path_str):
             return True
     return False
 
-
+# helper function to read file content, encoding binary files as base64
 def get_file_content(filepath):
     """Get file content (text or binary)"""
     ext = Path(filepath).suffix.lower()
@@ -65,7 +65,7 @@ def get_file_content(filepath):
         print(f"  Warning: Could not read {filepath}: {e}")
         return "", False
 
-
+# main function to scan project directory and build structure of files and directories
 def scan_project(root_dir):
     """Scan project and collect all files"""
     project_structure = {
@@ -85,28 +85,28 @@ def scan_project(root_dir):
     for dirpath, dirnames, filenames in os.walk(root_path):
         current_path = Path(dirpath).resolve()
         
-        # Filter out ignored directories
+        # filter out ignored directories
         dirnames[:] = [d for d in dirnames if not should_ignore(d)]
         
-        # Calculate relative path
+        # calculate relative path
         try:
             rel_dir = current_path.relative_to(root_path)
             rel_dir_str = str(rel_dir)
         except ValueError:
             continue
         
-        # Add directory (skip root)
+        # add directory (skip root)
         if rel_dir_str != '.' and rel_dir_str:
             project_structure['directories'].append(rel_dir_str)
         
-        # Process files
+        # process files
         for filename in filenames:
             if should_ignore(filename):
                 continue
             
             filepath = os.path.join(dirpath, filename)
             
-            # Get relative file path
+            # get relative file path
             try:
                 rel_file = str(Path(filepath).resolve().relative_to(root_path))
             except ValueError:
@@ -127,7 +127,7 @@ def scan_project(root_dir):
     
     return project_structure
 
-
+# function to generate the installer script with embedded project data and logic to create files and directories
 def generate_installer(project_structure, project_name, output_file):
     """Generate installation script"""
     
@@ -332,13 +332,13 @@ def generate_installer(project_structure, project_name, output_file):
     installer_lines.append('        print(f"\\n\\nInstallation error: {e}")')
     installer_lines.append('        sys.exit(1)')
     
-    # Write installer
+    # write installer
     installer_code = '\n'.join(installer_lines)
     
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(installer_code)
     
-    # Make executable on Unix
+    # make executable on Unix
     if platform.system() != 'Windows':
         os.chmod(output_file, 0o755)
     
@@ -348,25 +348,25 @@ def generate_installer(project_structure, project_name, output_file):
 def main():
     """Main function"""
     
-    # Parse arguments
+    # parse arguments
     source_dir = '.'
     project_name = None
     
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         
-        # Check if it's a path or just a name
+        # check if it's a path or just a name
         if os.path.isdir(arg):
             source_dir = arg
             project_name = Path(arg).resolve().name
         else:
             project_name = arg
     
-    # Default project name from current directory
+    # default project name from current directory
     if project_name is None:
         project_name = Path(source_dir).resolve().name
     
-    # Clean project name (remove spaces and special chars)
+    # clean project name (remove spaces and special chars)
     project_name = project_name.replace(' ', '_').replace('-', '_')
     
     print("")
@@ -380,10 +380,10 @@ def main():
     print("-" * 60)
     print("")
     
-    # Scan project
+    # scan project
     project_structure = scan_project(source_dir)
     
-    # Count items
+    # count items
     num_dirs = len(project_structure['directories'])
     num_files = len(project_structure['files'])
     
@@ -395,11 +395,11 @@ def main():
         print("Error: No files found! Check the source directory.")
         sys.exit(1)
     
-    # Generate installer
+    # generate installer
     output_file = f"install_{project_name}.py"
     generate_installer(project_structure, project_name, output_file)
     
-    # Get file size
+    # get file size
     file_size = os.path.getsize(output_file) / 1024
     
     print("")

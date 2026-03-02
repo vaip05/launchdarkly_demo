@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Task Manager Installation Script
+Use this script to set up the Task Manager demo with LaunchDarkly integration. It will create necessary files and install dependencies.
 ================================
 Run: python3 setup_task_manager.py
 """
@@ -1025,7 +1026,7 @@ def print_banner():
 ============================================================
     """)
 
-
+# get user input for configuration
 def get_user_input():
     print("\nAPI Key Configuration")
     print("-" * 40)
@@ -1041,7 +1042,7 @@ def get_user_input():
     
     return ld_key, ngrok_token
 
-
+# create directories
 def create_directory_structure(base_path):
     print("\nCreating directory structure...")
     
@@ -1054,13 +1055,13 @@ def create_directory_structure(base_path):
         os.makedirs(directory, exist_ok=True)
         print(f"  Created: {directory}")
 
-
+# helper function to write files
 def write_file(path, content):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content)
     print(f"  Created: {path}")
 
-
+# create all necessary files with content
 def create_files(base_path, ld_key, ngrok_token):
     print("\nCreating project files...")
     
@@ -1111,7 +1112,7 @@ Thumbs.db
 """
     write_file(os.path.join(base_path, ".gitignore"), gitignore_content)
 
-
+# install dependencies using pip
 def install_dependencies(base_path):
     print("\nInstalling dependencies...")
     
@@ -1188,7 +1189,7 @@ LAUNCHDARKLY_SDK_KEY=your-sdk-key-here
         print("Or run with --ngrok for a public URL")
     print("-" * 60)
 
-
+# main function for setup initiation
 def main():
     print_banner()
     

@@ -5,7 +5,7 @@ LaunchDarkly Experiment - Test Data Generator
 
 This script generates realistic test data for the progress-metrics experiment.
 It simulates user sessions, task creation, and task completion to reach the
-100+ exposures needed for meaningful experiment results.
+ exposures needed for meaningful experiment results.
 
 Usage: python3 generate_test_data.py
 """
@@ -29,7 +29,7 @@ try:
     from ldclient import Context
     from ldclient.config import Config
 except ImportError:
-    print("❌ Error: launchdarkly-server-sdk not installed")
+    print("ERROR: launchdarkly-server-sdk not installed")
     print("Run: pip install launchdarkly-server-sdk")
     sys.exit(1)
 
@@ -90,7 +90,7 @@ def initialize_launchdarkly():
     sdk_key = os.getenv("LAUNCHDARKLY_SDK_KEY", "")
     
     if not sdk_key:
-        print("❌ ERROR: No LaunchDarkly SDK key found!")
+        print("ERROR: No LaunchDarkly SDK key found!")
         print("\nPlease add your SDK key to the .env file:")
         print("LAUNCHDARKLY_SDK_KEY=sdk-your-key-here")
         sys.exit(1)
@@ -103,14 +103,14 @@ def initialize_launchdarkly():
     
     # Wait for initialization
     if not client.is_initialized():
-        print("⏳ Waiting for LaunchDarkly to initialize...")
+        print("WAITING for LaunchDarkly to initialize...")
         time.sleep(2)
     
     if client.is_initialized():
-        print("✅ LaunchDarkly connected!")
+        print("LaunchDarkly connected!")
         return client
     else:
-        print("❌ ERROR: LaunchDarkly failed to initialize!")
+        print("ERROR: LaunchDarkly failed to initialize!")
         print("\nCheck:")
         print("  1. SDK key is correct")
         print("  2. Internet connection is working")
@@ -226,15 +226,15 @@ This helps reach the 100+ exposures needed for meaningful results.
     # Confirm before proceeding
     response = input("Continue? [Y/n]: ").strip().lower()
     if response == 'n':
-        print("\n❌ Cancelled.")
+        print("\n CANCELLED.")
         sys.exit(0)
     
     # Initialize
     print_section("INITIALIZATION")
     
-    print("📦 Initializing database...")
+    print("Initializing database...")
     db.init_db()
-    print("✅ Database ready")
+    print("Database ready")
     
     print("\n🚀 Connecting to LaunchDarkly...")
     ld_client = initialize_launchdarkly()
@@ -244,7 +244,7 @@ This helps reach the 100+ exposures needed for meaningful results.
     users = get_users()
     
     if not users:
-        print("❌ ERROR: No users found in database!")
+        print("ERROR: No users found in database!")
         print("Run the app first to create demo users.")
         sys.exit(1)
     
@@ -256,10 +256,10 @@ This helps reach the 100+ exposures needed for meaningful results.
     progress_flag = ld_client.variation("progress-metrics", test_context, None)
     
     if progress_flag is None:
-        print("⚠️  WARNING: 'progress-metrics' flag not found!")
+        print("WARNING: 'progress-metrics' flag not found!")
         print("Create this flag in LaunchDarkly before running the experiment.")
     else:
-        print(f"✅ progress-metrics flag found (test value: {progress_flag})")
+        print(f"progress-metrics flag found (test value: {progress_flag})")
     
     # Generate data
     print_section("GENERATING TEST DATA")
@@ -275,12 +275,12 @@ This helps reach the 100+ exposures needed for meaningful results.
     }
     
     for user in users:
-        print(f"\n👤 User: {user['username']} ({user['plan']})")
+        print(f"\nUser: {user['username']} ({user['plan']})")
         
         context = build_context(user)
         sees_progress = ld_client.variation("progress-metrics", context, False)
         
-        print(f"   Progress metrics: {'✅ ENABLED (Treatment)' if sees_progress else '❌ DISABLED (Control)'}")
+        print(f"   Progress metrics: {'✅ ENABLED (Treatment)' if sees_progress else 'DISABLED (Control)'}")
         
         # Generate multiple sessions
         num_sessions = random.randint(MIN_SESSIONS, MAX_SESSIONS)
@@ -317,14 +317,14 @@ This helps reach the 100+ exposures needed for meaningful results.
         print(f"   Tasks: {user_tasks_completed}/{user_tasks_created} completed ({completion_pct:.0f}%)")
     
     # Final flush
-    print("\n⏳ Flushing remaining events...")
+    print("\nFlushing remaining events...")
     ld_client.flush()
     time.sleep(1)
     
     # Summary
     print_section("SUMMARY")
     
-    print("\n📊 EXPERIMENT GROUPS:")
+    print("\nEXPERIMENT GROUPS:")
     print(f"\n  Treatment (sees progress chart):")
     print(f"    Users in group: {total_stats['treatment_sessions'] // MAX_SESSIONS}")
     print(f"    Total sessions: {total_stats['treatment_sessions']}")
@@ -345,7 +345,7 @@ This helps reach the 100+ exposures needed for meaningful results.
     
     total_completed = total_stats['treatment_completed'] + total_stats['control_completed']
     
-    print(f"\n📈 TOTAL EVENTS:")
+    print(f"\nTOTAL EVENTS:")
     print(f"    task-completed events: {total_completed}")
     print(f"    task-created events: {total_stats['treatment_created'] + total_stats['control_created']}")
     print(f"    user-login events: {total_stats['treatment_sessions'] + total_stats['control_sessions']}")
@@ -353,7 +353,7 @@ This helps reach the 100+ exposures needed for meaningful results.
     # Next steps
     print_section("NEXT STEPS")
     print("""
-✅ Data generation complete!
+Data generation complete!
 
 1. Wait 2-3 minutes for events to process in LaunchDarkly
 
@@ -387,10 +387,10 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        print("\n\nInterrupted by user")
         sys.exit(0)
     except Exception as e:
-        print(f"\n\n❌ ERROR: {e}")
+        print(f"\n\nERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

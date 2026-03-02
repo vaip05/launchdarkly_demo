@@ -1,0 +1,396 @@
+#!/usr/bin/env python3
+"""
+LaunchDarkly Experiment - Test Data Generator
+==============================================
+
+This script generates realistic test data for the progress-metrics experiment.
+It simulates user sessions, task creation, and task completion to reach the
+100+ exposures needed for meaningful experiment results.
+
+Usage: python3 generate_test_data.py
+"""
+
+import os
+import sys
+from dotenv import load_dotenv
+from datetime import datetime, timedelta
+import random
+import time
+
+# Load environment variables
+load_dotenv()
+
+# Import local modules
+import database as db
+
+# LaunchDarkly imports
+try:
+    import ldclient
+    from ldclient import Context
+    from ldclient.config import Config
+except ImportError:
+    print("❌ Error: launchdarkly-server-sdk not installed")
+    print("Run: pip install launchdarkly-server-sdk")
+    sys.exit(1)
+
+
+# ============================================
+# CONFIGURATION
+# ============================================
+
+TASK_IDEAS = [
+    "Buy groceries", "Finish report", "Call dentist", "Send email",
+    "Review code", "Update documentation", "Schedule meeting", "Pay bills",
+    "Exercise", "Read article", "Clean desk", "Backup files",
+    "Plan vacation", "Order supplies", "Fix bug", "Write tests",
+    "Deploy changes", "Review PR", "Update README", "Refactor code",
+    "Organize photos", "Meal prep", "Water plants", "Learn Python",
+    "Update resume", "Practice guitar", "Call mom", "Book flight",
+    "File taxes", "Clean kitchen", "Wash car", "Buy gift",
+    "Renew license", "Cancel subscription", "Reply to messages", "Sort email",
+    "Create presentation", "Design mockup", "Test feature", "Write blog post"
+]
+
+CATEGORIES = ['Work', 'Personal', 'Shopping', 'Health', 'General']
+PRIORITIES = ['Low', 'Medium', 'High']
+
+# Sessions per user (randomized)
+MIN_SESSIONS = 8
+MAX_SESSIONS = 15
+
+# Tasks per session (randomized)
+MIN_TASKS = 2
+MAX_TASKS = 5
+
+# Completion rate (users who see progress metrics complete more)
+COMPLETION_RATE_WITH_CHART = (0.70, 0.85)  # 70-85% completion
+COMPLETION_RATE_WITHOUT_CHART = (0.55, 0.70)  # 55-70% completion
+
+
+# ============================================
+# HELPER FUNCTIONS
+# ============================================
+
+def print_header(text):
+    """Print a formatted header."""
+    print("\n" + "="*70)
+    print(text.center(70))
+    print("="*70)
+
+
+def print_section(text):
+    """Print a section divider."""
+    print("\n" + "-"*70)
+    print(text)
+    print("-"*70)
+
+
+def initialize_launchdarkly():
+    """Initialize LaunchDarkly client."""
+    sdk_key = os.getenv("LAUNCHDARKLY_SDK_KEY", "")
+    
+    if not sdk_key:
+        print("❌ ERROR: No LaunchDarkly SDK key found!")
+        print("\nPlease add your SDK key to the .env file:")
+        print("LAUNCHDARKLY_SDK_KEY=sdk-your-key-here")
+        sys.exit(1)
+    
+    print(f"🔑 SDK Key: {sdk_key[:20]}...")
+    
+    config = Config(sdk_key=sdk_key)
+    ldclient.set_config(config)
+    client = ldclient.get()
+    
+    # Wait for initialization
+    if not client.is_initialized():
+        print("⏳ Waiting for LaunchDarkly to initialize...")
+        time.sleep(2)
+    
+    if client.is_initialized():
+        print("✅ LaunchDarkly connected!")
+        return client
+    else:
+        print("❌ ERROR: LaunchDarkly failed to initialize!")
+        print("\nCheck:")
+        print("  1. SDK key is correct")
+        print("  2. Internet connection is working")
+        print("  3. SDK key is from the correct environment")
+        sys.exit(1)
+
+
+def get_users():
+    """Get all demo users from database."""
+    usernames = ['alice', 'bob', 'carol', 'david', 'eve']
+    users = []
+    
+    for username in usernames:
+        user = db.get_user_by_username(username)
+        if user:
+            users.append(dict(user))
+        else:
+            print(f"⚠️  Warning: User '{username}' not found in database")
+    
+    return users
+
+
+def build_context(user):
+    """Build LaunchDarkly context for a user."""
+    return (Context.builder(f"user-{user['id']}")
+            .kind("user")
+            .name(user['username'])
+            .set("email", user['email'])
+            .set("plan", user['plan'])
+            .set("registered", user['created_at'][:10])
+            .build())
+
+
+def generate_user_session(user, ld_client, session_num):
+    """Generate a single user session with tasks."""
+    context = build_context(user)
+    
+    # Check if user sees progress metrics
+    sees_progress = ld_client.variation("progress-metrics", context, False)
+    
+    # Determine completion rate based on whether user sees progress
+    if sees_progress:
+        completion_rate = random.uniform(*COMPLETION_RATE_WITH_CHART)
+    else:
+        completion_rate = random.uniform(*COMPLETION_RATE_WITHOUT_CHART)
+    
+    # Track login
+    ld_client.track("user-login", context)
+    
+    # If user sees progress chart, track that they viewed it
+    if sees_progress:
+        ld_client.track("progress-chart-viewed", context)
+    
+    # Create tasks
+    num_tasks = random.randint(MIN_TASKS, MAX_TASKS)
+    created_task_ids = []
+    
+    for _ in range(num_tasks):
+        task_title = random.choice(TASK_IDEAS)
+        category = random.choice(CATEGORIES)
+        priority = random.choice(PRIORITIES)
+        
+        # Randomly add due date (30% chance)
+        due_date = None
+        if random.random() < 0.3:
+            days_ahead = random.randint(1, 14)
+            due_date = (datetime.now() + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
+        
+        task_id = db.add_task(user['id'], task_title, category, priority, due_date)
+        created_task_ids.append(task_id)
+        
+        # Track task creation
+        ld_client.track("task-created", context)
+    
+    # Complete some tasks based on completion rate
+    num_to_complete = int(num_tasks * completion_rate)
+    
+    if num_to_complete > 0:
+        tasks_to_complete = random.sample(created_task_ids, num_to_complete)
+        
+        for task_id in tasks_to_complete:
+            db.toggle_task(task_id, user['id'])
+            
+            # Track task completion (PRIMARY METRIC)
+            ld_client.track("task-completed", context)
+    
+    return {
+        'tasks_created': num_tasks,
+        'tasks_completed': num_to_complete,
+        'sees_progress': sees_progress
+    }
+
+
+# ============================================
+# MAIN SCRIPT
+# ============================================
+
+def main():
+    """Main execution function."""
+    
+    print_header("LAUNCHDARKLY EXPERIMENT - TEST DATA GENERATOR")
+    
+    print("""
+This script will:
+  1. Connect to LaunchDarkly
+  2. Generate realistic user sessions
+  3. Create and complete tasks
+  4. Track events for experiment analysis
+  
+This helps reach the 100+ exposures needed for meaningful results.
+    """)
+    
+    # Confirm before proceeding
+    response = input("Continue? [Y/n]: ").strip().lower()
+    if response == 'n':
+        print("\n❌ Cancelled.")
+        sys.exit(0)
+    
+    # Initialize
+    print_section("INITIALIZATION")
+    
+    print("📦 Initializing database...")
+    db.init_db()
+    print("✅ Database ready")
+    
+    print("\n🚀 Connecting to LaunchDarkly...")
+    ld_client = initialize_launchdarkly()
+    
+    # Get users
+    print_section("LOADING USERS")
+    users = get_users()
+    
+    if not users:
+        print("❌ ERROR: No users found in database!")
+        print("Run the app first to create demo users.")
+        sys.exit(1)
+    
+    print(f"✅ Found {len(users)} users: {', '.join(u['username'] for u in users)}")
+    
+    # Check flag configuration
+    print_section("FLAG CONFIGURATION")
+    test_context = Context.builder("test").kind("user").build()
+    progress_flag = ld_client.variation("progress-metrics", test_context, None)
+    
+    if progress_flag is None:
+        print("⚠️  WARNING: 'progress-metrics' flag not found!")
+        print("Create this flag in LaunchDarkly before running the experiment.")
+    else:
+        print(f"✅ progress-metrics flag found (test value: {progress_flag})")
+    
+    # Generate data
+    print_section("GENERATING TEST DATA")
+    print("This may take 30-60 seconds...\n")
+    
+    total_stats = {
+        'treatment_sessions': 0,
+        'control_sessions': 0,
+        'treatment_completed': 0,
+        'control_completed': 0,
+        'treatment_created': 0,
+        'control_created': 0,
+    }
+    
+    for user in users:
+        print(f"\n👤 User: {user['username']} ({user['plan']})")
+        
+        context = build_context(user)
+        sees_progress = ld_client.variation("progress-metrics", context, False)
+        
+        print(f"   Progress metrics: {'✅ ENABLED (Treatment)' if sees_progress else '❌ DISABLED (Control)'}")
+        
+        # Generate multiple sessions
+        num_sessions = random.randint(MIN_SESSIONS, MAX_SESSIONS)
+        
+        user_tasks_created = 0
+        user_tasks_completed = 0
+        
+        for session_num in range(num_sessions):
+            result = generate_user_session(user, ld_client, session_num)
+            
+            user_tasks_created += result['tasks_created']
+            user_tasks_completed += result['tasks_completed']
+            
+            # Update totals
+            if sees_progress:
+                total_stats['treatment_sessions'] += 1
+                total_stats['treatment_completed'] += result['tasks_completed']
+                total_stats['treatment_created'] += result['tasks_created']
+            else:
+                total_stats['control_sessions'] += 1
+                total_stats['control_completed'] += result['tasks_completed']
+                total_stats['control_created'] += result['tasks_created']
+            
+            # Small delay to avoid rate limiting
+            if session_num % 5 == 0 and session_num > 0:
+                time.sleep(0.1)
+        
+        # Flush events for this user
+        ld_client.flush()
+        
+        completion_pct = (user_tasks_completed / user_tasks_created * 100) if user_tasks_created > 0 else 0
+        
+        print(f"   Sessions: {num_sessions}")
+        print(f"   Tasks: {user_tasks_completed}/{user_tasks_created} completed ({completion_pct:.0f}%)")
+    
+    # Final flush
+    print("\n⏳ Flushing remaining events...")
+    ld_client.flush()
+    time.sleep(1)
+    
+    # Summary
+    print_section("SUMMARY")
+    
+    print("\n📊 EXPERIMENT GROUPS:")
+    print(f"\n  Treatment (sees progress chart):")
+    print(f"    Users in group: {total_stats['treatment_sessions'] // MAX_SESSIONS}")
+    print(f"    Total sessions: {total_stats['treatment_sessions']}")
+    print(f"    Tasks created: {total_stats['treatment_created']}")
+    print(f"    Tasks completed: {total_stats['treatment_completed']}")
+    if total_stats['treatment_created'] > 0:
+        treatment_rate = total_stats['treatment_completed'] / total_stats['treatment_created'] * 100
+        print(f"    Completion rate: {treatment_rate:.1f}%")
+    
+    print(f"\n  Control (no progress chart):")
+    print(f"    Users in group: {total_stats['control_sessions'] // MAX_SESSIONS}")
+    print(f"    Total sessions: {total_stats['control_sessions']}")
+    print(f"    Tasks created: {total_stats['control_created']}")
+    print(f"    Tasks completed: {total_stats['control_completed']}")
+    if total_stats['control_created'] > 0:
+        control_rate = total_stats['control_completed'] / total_stats['control_created'] * 100
+        print(f"    Completion rate: {control_rate:.1f}%")
+    
+    total_completed = total_stats['treatment_completed'] + total_stats['control_completed']
+    
+    print(f"\n📈 TOTAL EVENTS:")
+    print(f"    task-completed events: {total_completed}")
+    print(f"    task-created events: {total_stats['treatment_created'] + total_stats['control_created']}")
+    print(f"    user-login events: {total_stats['treatment_sessions'] + total_stats['control_sessions']}")
+    
+    # Next steps
+    print_section("NEXT STEPS")
+    print("""
+✅ Data generation complete!
+
+1. Wait 2-3 minutes for events to process in LaunchDarkly
+
+2. Check your experiment:
+   - Go to LaunchDarkly → Experiments
+   - Click "Progress Metrics Task Completion"
+   - "Metric last seen" should update
+   - You should see event counts and conversion rates
+
+3. View results:
+   - Treatment vs Control comparison
+   - Statistical significance (if enough data)
+   - Confidence intervals
+
+4. If you need more data:
+   - Run this script again
+   - Or add more users with seed_more_users.py
+    """)
+    
+    # Cleanup
+    ld_client.close()
+    
+    print("="*70)
+
+
+# ============================================
+# ENTRY POINT
+# ============================================
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Interrupted by user")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n\n❌ ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

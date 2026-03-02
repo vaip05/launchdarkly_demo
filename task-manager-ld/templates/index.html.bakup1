@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% if flags.progress_metrics and progress_data %}
+<div class="card progress-card">
+    <h2 class="card-title">Your Progress</h2>
+    
+    <div class="progress-grid">
+        <div class="progress-stat">
+            <div class="progress-stat-value color-accent">{{ progress_data.total_tasks }}</div>
+            <div class="progress-stat-label">Total Tasks</div>
+        </div>
+        <div class="progress-stat">
+            <div class="progress-stat-value color-success">{{ progress_data.completed_tasks }}</div>
+            <div class="progress-stat-label">Completed</div>
+        </div>
+        <div class="progress-stat">
+            <div class="progress-stat-value color-warning">{{ progress_data.completion_rate }}%</div>
+            <div class="progress-stat-label">Completion Rate</div>
+        </div>
+    </div>
+    
+    <div class="chart-container">
+        <canvas id="progressChart"></canvas>
+    </div>
+    
+    <div id="chartData" 
+         data-labels="{{ progress_data.labels | tojson }}" 
+         data-values="{{ progress_data.data | tojson }}" 
+         style="display: none;">
+    </div>
+</div>
+{% endif %}
+
+{% if flags.stats and stats %}
+<div class="card">
+    <div class="stats-row">
+        <div>
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">Total</div>
+        </div>
+        <div>
+            <div class="stat-value color-success">{{ stats.done }}</div>
+            <div class="stat-label">Done</div>
+        </div>
+        <div>
+            <div class="stat-value color-warning">{{ stats.pending }}</div>
+            <div class="stat-label">Pending</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if flags.search %}
+<div class="card">
+    <form method="GET" action="{{ url_for('index') }}" class="search-form">
+        <input type="text" name="q" value="{{ search_query }}" placeholder="Search tasks..." class="form-input" style="flex: 1;">
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if search_query %}
+        <a href="{{ url_for('index') }}" class="btn btn-outline">Clear</a>
+        {% endif %}
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2 class="card-title">Add Task</h2>
+    <form method="POST" action="{{ url_for('add') }}" class="add-task-form">
+        <input type="text" name="title" required placeholder="What needs to be done?" class="form-input add-task-input">
+        
+        {% if flags.categories %}
+        <select name="category" class="form-input">
+            <option value="General">General</option>
+            <option value="Work">Work</option>
+            <option value="Personal">Personal</option>
+            <option value="Shopping">Shopping</option>
+            <option value="Health">Health</option>
+        </select>
+        {% endif %}
+        
+        {% if flags.priority %}
+        <select name="priority" class="form-input">
+            <option value="Low">Low</option>
+            <option value="Medium" selected>Medium</option>
+            <option value="High">High</option>
+        </select>
+        {% endif %}
+        
+        {% if flags.due_dates %}
+        <input type="date" name="due" class="form-input">
+        {% endif %}
+        
+        <button type="submit" class="btn btn-primary">Add Task</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Tasks ({{ tasks|length }})</h2>
+    
+    {% if tasks %}
+    <ul class="task-list">
+        {% for task in tasks %}
+        <li class="task-item {% if task.done %}task-done-item{% endif %}">
+            
+            <a href="{{ url_for('toggle', task_id=task.id) }}" class="task-toggle">
+                {% if task.done %}[x]{% else %}[ ]{% endif %}
+            </a>
+            
+            <div class="task-content">
+                <div class="{% if task.done %}task-done{% endif %}">{{ task.title }}</div>
+                <div class="task-meta">
+                    {% if flags.categories and task.category %}
+                    <span>{{ task.category }}</span>
+                    {% endif %}
+                    {% if flags.priority and task.priority %}
+                    <span>{{ task.priority }}</span>
+                    {% endif %}
+                    {% if flags.due_dates and task.due_date %}
+                    <span>{{ task.due_date }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <a href="{{ url_for('delete', task_id=task.id) }}" class="btn btn-danger">Delete</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No tasks yet. Add one above!</p>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% if flags.progress_metrics and progress_data %}
+<script>
+(function() {
+    var chartDataEl = document.getElementById('chartData');
+    if (!chartDataEl) return;
+    
+    var labelsData = JSON.parse(chartDataEl.getAttribute('data-labels'));
+    var valuesData = JSON.parse(chartDataEl.getAttribute('data-values'));
+    var isDark = document.documentElement.dataset.theme === 'dark';
+    
+    var ctx = document.getElementById('progressChart');
+    if (!ctx) return;
+    
+    new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labelsData,
+            datasets: [{
+                label: 'Tasks Completed',
+                data: valuesData,
+                backgroundColor: isDark ? 'rgba(77, 171, 247, 0.7)' : 'rgba(13, 110, 253, 0.7)',
+                borderColor: isDark ? 'rgba(77, 171, 247, 1)' : 'rgba(13, 110, 253, 1)',
+                borderWidth: 2,
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        color: isDark ? '#a0a0a0' : '#6c757d'
+                    },
+                    grid: {
+                        color: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: isDark ? '#a0a0a0' : '#6c757d'
+                    },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

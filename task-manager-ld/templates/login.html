@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="max-width: 400px; margin: 4rem auto;">
+    <div class="card">
+        <h2 class="card-title">Sign In</h2>
+        
+        <form method="POST" action="{{ url_for('login') }}">
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Username</label>
+                <input type="text" name="username" required autofocus
+                    style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);"
+                    placeholder="Enter username">
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Password</label>
+                <input type="password" name="password" required
+                    style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);"
+                    placeholder="Enter password">
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 0.75rem;">
+                Sign In
+            </button>
+        </form>
+    </div>
+    
+    <div class="card">
+        <h3 class="card-title">Demo Users</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+            Click to auto-fill (password: demo)
+        </p>
+        
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            {% for username in demo_users %}
+            <button type="button" class="btn btn-outline demo-user-btn" data-username="{{ username }}"
+                style="flex: 1; min-width: 80px; justify-content: center;">
+                {{ username }}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="card" style="background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));">
+        <h3 class="card-title">Experiment Info</h3>
+        <p style="font-size: 0.875rem; color: var(--text-secondary); line-height: 1.6;">
+            This demo runs an A/B experiment using LaunchDarkly. Some users will see 
+            a Progress Metrics Chart while others will not. We measure if seeing 
+            progress affects task completion rates.
+        </p>
+    </div>
+</div>
+
+<script>
+    document.querySelectorAll('.demo-user-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelector('input[name="username"]').value = btn.dataset.username;
+            document.querySelector('input[name="password"]').value = 'demo';
+        });
+    });
+</script>
+{% endblock %}

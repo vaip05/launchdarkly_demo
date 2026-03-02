@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% if flags.progress_metrics and progress_data %}
+<div class="card" style="background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));">
+    <h2 class="card-title">Your Progress</h2>
+    
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+        <div style="text-align: center; padding: 1rem; background: var(--bg-primary); border-radius: 8px;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--accent);">{{ progress_data.total_tasks }}</div>
+            <div style="font-size: 0.875rem; color: var(--text-secondary);">Total Tasks</div>
+        </div>
+        <div style="text-align: center; padding: 1rem; background: var(--bg-primary); border-radius: 8px;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--success);">{{ progress_data.completed_tasks }}</div>
+            <div style="font-size: 0.875rem; color: var(--text-secondary);">Completed</div>
+        </div>
+        <div style="text-align: center; padding: 1rem; background: var(--bg-primary); border-radius: 8px;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--warning);">{{ progress_data.completion_rate }}%</div>
+            <div style="font-size: 0.875rem; color: var(--text-secondary);">Completion Rate</div>
+        </div>
+    </div>
+    
+    <div style="height: 200px;"><canvas id="progressChart"></canvas></div>
+</div>
+{% endif %}
+
+{% if flags.stats and stats %}
+<div class="card">
+    <div style="display: flex; justify-content: space-around; text-align: center;">
+        <div>
+            <div style="font-size: 1.5rem; font-weight: bold;">{{ stats.total }}</div>
+            <div style="color: var(--text-secondary); font-size: 0.875rem;">Total</div>
+        </div>
+        <div>
+            <div style="font-size: 1.5rem; font-weight: bold; color: var(--success);">{{ stats.done }}</div>
+            <div style="color: var(--text-secondary); font-size: 0.875rem;">Done</div>
+        </div>
+        <div>
+            <div style="font-size: 1.5rem; font-weight: bold; color: var(--warning);">{{ stats.pending }}</div>
+            <div style="color: var(--text-secondary); font-size: 0.875rem;">Pending</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if flags.search %}
+<div class="card">
+    <form method="GET" action="{{ url_for('index') }}" style="display: flex; gap: 0.5rem;">
+        <input type="text" name="q" value="{{ search_query }}" placeholder="Search tasks..." 
+            style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if search_query %}<a href="{{ url_for('index') }}" class="btn btn-outline">Clear</a>{% endif %}
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2 class="card-title">Add Task</h2>
+    <form method="POST" action="{{ url_for('add') }}">
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+            <input type="text" name="title" required placeholder="What needs to be done?"
+                style="flex: 2; min-width: 200px; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
+            
+            {% if flags.categories %}
+            <select name="category" style="padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
+                <option value="General">General</option>
+                <option value="Work">Work</option>
+                <option value="Personal">Personal</option>
+                <option value="Shopping">Shopping</option>
+                <option value="Health">Health</option>
+            </select>
+            {% endif %}
+            
+            {% if flags.priority %}
+            <select name="priority" style="padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+            </select>
+            {% endif %}
+            
+            {% if flags.due_dates %}
+            <input type="date" name="due" style="padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
+            {% endif %}
+            
+            <button type="submit" class="btn btn-primary">Add Task</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Tasks ({{ tasks|length }})</h2>
+    
+    {% if tasks %}
+    <ul style="list-style: none;">
+        {% for task in tasks %}
+        <li style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--border-color); {% if task.done %}opacity: 0.6;{% endif %}">
+            <a href="{{ url_for('toggle', task_id=task.id) }}" style="font-size: 1.5rem; text-decoration: none;">
+                {% if task.done %}[x]{% else %}[ ]{% endif %}
+            </a>
+            
+            <div style="flex: 1;">
+                <div style="{% if task.done %}text-decoration: line-through;{% endif %}">{{ task.title }}</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                    {% if flags.categories and task.category %}<span>{{ task.category }}</span>{% endif %}
+                    {% if flags.priority and task.priority %}
+                        <span style="margin-left: 0.5rem;">{{ task.priority }}</span>
+                    {% endif %}
+                    {% if flags.due_dates and task.due_date %}<span style="margin-left: 0.5rem;">{{ task.due_date }}</span>{% endif %}
+                </div>
+            </div>
+            
+            <a href="{{ url_for('delete', task_id=task.id) }}" class="btn btn-danger" style="padding: 0.25rem 0.5rem;">Delete</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No tasks yet. Add one above!</p>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% if flags.progress_metrics and progress_data %}
+<script>
+    const ctx = document.getElementById('progressChart').getContext('2d');
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ progress_data.labels | tojson }},
+            datasets: [{
+                label: 'Tasks Completed',
+                data: {{ progress_data.data | tojson }},
+                backgroundColor: isDark ? 'rgba(77, 171, 247, 0.7)' : 'rgba(13, 110, 253, 0.7)',
+                borderColor: isDark ? 'rgba(77, 171, 247, 1)' : 'rgba(13, 110, 253, 1)',
+                borderWidth: 2,
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1, color: isDark ? '#a0a0a0' : '#6c757d' },
+                    grid: { color: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }
+                },
+                x: {
+                    ticks: { color: isDark ? '#a0a0a0' : '#6c757d' },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}
